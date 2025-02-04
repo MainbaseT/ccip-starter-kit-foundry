@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity 0.8.24;
 
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
 import {IRouterClient} from "@chainlink/contracts-ccip/src/v0.8/ccip/interfaces/IRouterClient.sol";
@@ -29,36 +29,25 @@ contract BasicMessageSender is Withdraw {
 
     receive() external payable {}
 
-    function send(
-        uint64 destinationChainSelector,
-        address receiver,
-        string memory messageText,
-        PayFeesIn payFeesIn
-    ) external returns (bytes32 messageId) {
+    function send(uint64 destinationChainSelector, address receiver, string memory messageText, PayFeesIn payFeesIn)
+        external
+        returns (bytes32 messageId)
+    {
         Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
             receiver: abi.encode(receiver),
             data: abi.encode(messageText),
             tokenAmounts: new Client.EVMTokenAmount[](0),
-            extraArgs: "",
+            extraArgs: Client._argsToBytes(Client.EVMExtraArgsV2({gasLimit: 200_000, allowOutOfOrderExecution: true})),
             feeToken: payFeesIn == PayFeesIn.LINK ? i_link : address(0)
         });
 
-        uint256 fee = IRouterClient(i_router).getFee(
-            destinationChainSelector,
-            message
-        );
+        uint256 fee = IRouterClient(i_router).getFee(destinationChainSelector, message);
 
         if (payFeesIn == PayFeesIn.LINK) {
             LinkTokenInterface(i_link).approve(i_router, fee);
-            messageId = IRouterClient(i_router).ccipSend(
-                destinationChainSelector,
-                message
-            );
+            messageId = IRouterClient(i_router).ccipSend(destinationChainSelector, message);
         } else {
-            messageId = IRouterClient(i_router).ccipSend{value: fee}(
-                destinationChainSelector,
-                message
-            );
+            messageId = IRouterClient(i_router).ccipSend{value: fee}(destinationChainSelector, message);
         }
 
         emit MessageSent(messageId);
